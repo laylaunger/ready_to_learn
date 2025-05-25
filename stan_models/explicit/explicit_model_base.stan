@@ -1,0 +1,65 @@
+// Model name: model_base
+// Model in which slopes and intercepts are drawn from the same distribution, regardless of condition
+
+data {
+  int<lower=1> num_sub; // number of subjects
+  int<lower=1> num_trials; // number of trials
+  int<lower=1> sub_condition[num_sub]; // condition for each subject
+  matrix<lower=0>[num_sub,num_trials] trial; // trial number predictor
+  int<lower=0,upper=1> acc[num_sub,num_trials]; // accuracies (binary integers - 0 or 1)
+  }
+parameters {
+  real alpha[num_sub];        // Intercept for each participant
+  real sub_slope[num_sub]; // Slope for trial number for each particpant
+  
+  real hyper_alpha;  // mean of the single distribution for subject intercepts
+  real<lower=0> hyper_alpha_sigma2; // variance of the single distribution for subject intercepts
+  real condition_slope_mean;   // mean of the single distribution for for subject trial slopes
+  real<lower=0> condition_slope_sigma2;  // variance of the single distributions for subject trial slopes
+  }
+
+transformed parameters {
+  real<lower=0> hyper_alpha_sigma;
+  real<lower=0> condition_slope_sigma;
+  
+  hyper_alpha_sigma = sqrt(hyper_alpha_sigma2);
+  condition_slope_sigma = sqrt(condition_slope_sigma2);
+  }
+
+model {
+// Priors for hyperparameters
+  hyper_alpha ~ normal(0,1/.01);
+  condition_slope_mean ~ normal(0,1/.01);
+  
+  hyper_alpha_sigma2 ~ inv_gamma(.01,.01);
+  condition_slope_sigma2 ~ inv_gamma(.01,.01);
+
+
+// Priors for intercepts and slopes for each participant
+// Use this to draw intercepts from one distribution, and slopes from one distribution
+  for (i in 1:num_sub){                           
+    alpha[i] ~ normal(hyper_alpha,hyper_alpha_sigma);
+    sub_slope[i] ~ normal(condition_slope_mean,condition_slope_sigma);
+
+// Likelihood for accuracy: Predicted by participant's intercept, their slope for trial type, and their slope for trial num
+    for (j in 1:num_trials){                         
+    acc[i,j] ~ bernoulli_logit(alpha[i] + 
+    sub_slope[i] * trial[i,j]);
+    }
+  }
+}
+
+generated quantities {
+  matrix[num_sub,num_trials] log_lik;// matrix of log-likelihoods for each acc observation
+  real ppd_mean_acc[num_sub]; // vector of predicted mean accuracies
+  
+  for (i in 1:num_sub) {
+    vector[num_trials] ppd_accuracies; //vector of predicted accuracies for each trial
+    
+    for (j in 1:num_trials) {
+      log_lik[i,j] =  bernoulli_logit_lpmf(acc[i,j] | alpha[i] + sub_slope[i] * trial[i,j] );
+      ppd_accuracies[j] = bernoulli_logit_rng(alpha[i] + sub_slope[i] * trial[i,j] ); //predicted acc on the jth trial for the ith subject
+    }
+    ppd_mean_acc[i] = mean(ppd_accuracies); //predicted mean acc for the ith subject
+  }
+}
