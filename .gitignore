@@ -48,5 +48,6 @@ po/*~
 # RStudio Connect folder
 rsconnect/
 
-# RDS files
-*.rds
+# fit objects (which are large)
+**/fit_*
+stan_models/**/*.rds
